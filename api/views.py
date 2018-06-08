@@ -5,24 +5,171 @@ from .models import Sentence
 from django.core.paginator import Paginator
 from django.views.generic import ListView
 from django.db import connection
-from lxml import etree
 import csv
 from xml.etree.ElementTree import Element, SubElement, Comment, tostring
 import datetime
 from django.http import StreamingHttpResponse
 import time
 import re
+import nltk
 from django.utils.html import escape
 from django.db import connections
+from nltk.tokenize import PunktSentenceTokenizer
+import numpy as np
+from sklearn.naive_bayes import GaussianNB
+from sklearn.feature_extraction.text import CountVectorizer
 
 
+
+class TestView(ListView):
+
+
+    def learn_1(self):
+        y, tokens = [], []
+        sentences = Sentence.objects.filter(grammar_constructions__in=[1])
+        vectorizer = CountVectorizer(ngram_range=(1, 3))
+
+        for sentence in sentences:
+            tokens.append(self.get_tokens(sentence.content))
+            y.append(sentence.sentencegrammarconstruction_set.get().value)
+
+        x = vectorizer.fit_transform(tokens).toarray()
+
+
+        model = GaussianNB()
+        model.fit(x, y)
+
+        res = []
+        x = x.tolist()
+        for i in x:
+            predicted = model.predict([x[i]])
+            if predicted[0] != y[i]:
+                res.append([sentence.content, y[i]], predicted[0])
+
+        # predicted = model.predict(x)
+        a = res
+
+
+
+    def train(self, x, y):
+        from sklearn import metrics
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.naive_bayes import GaussianNB
+        model = GaussianNB()
+        # model = LogisticRegression()
+        model.fit(x, y)
+        # print(model)
+        # make predictions
+        expected = y
+        predicted = model.predict(x)
+        # print(predicted)
+        # summarize the fit of the model
+        # print(metrics.classification_report(expected, predicted))
+
+
+        y_test = np.asarray(y)
+        y_test = np.asarray(y_test)
+        misclassified = np.where(y_test != model.predict(x))
+
+
+
+        print(metrics.confusion_matrix(expected, predicted))
+
+    def vectorize_ngrams_tokenization(self, texts):
+        from sklearn.feature_extraction.text import CountVectorizer
+        allowed = ['CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS',
+                   'PDT', 'POS', 'PRP', 'PRP$', 'RB', 'RBR', 'RBS', 'RP', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP',
+                   'VBZ', 'WDT', 'WP', 'WP$', 'WRB']
+        vectorizer = CountVectorizer(ngram_range=(1, 3), vocabulary=allowed)
+        result = vectorizer.fit_transform(texts).toarray()
+        res1 = vectorizer.vocabulary_
+
+        return result
+
+    def vectorize_bag_of_words(self):
+        from functools import reduce
+        import numpy as np
+
+        texts = [['i', 'have', 'a', 'cat'],
+                 ['he', 'have', 'a', 'dog'],
+                 ['he', 'and', 'i', 'have', 'a', 'cat', 'and', 'a', 'dog']]
+
+        dictionary = list(enumerate(set(reduce(lambda x, y: x + y, texts))))
+
+        def vectorize(text):
+            vector = np.zeros(len(dictionary))
+            for i, word in dictionary:
+                num = 0
+                for w in text:
+                    if w == word:
+                        num += 1
+                if num:
+                    vector[i] = num
+            return vector
+
+        for t in texts:
+            print(vectorize(t))
+
+    def split_by_sentences(self):
+
+        text = """
+        Where username is your username in your system. Save and close sudoers file (if you haven't changed your default terminal editor (you'll know if you have), press ctl+x to exit nano (but note that the screenshot below shows vim), and it'll prompt you to save).
+        """
+        sentences = nltk.tokenize.sent_tokenize(text)
+    def wordnet(self):
+        synonimus = nltk.corpus.wordnet.synsets('program')
+
+
+        #synset
+        i = synonimus[0].name()
+
+        # one word
+        i = synonimus[0].lemmas()[0].name()
+
+        #definition
+        i = synonimus[0].definition()
+
+        #examples
+        i = synonimus[0].examples()
+
+        #antonyns
+        i = synonimus[0].lemmas()[0].antonyms()
+
+
+
+        return 1
+
+    def get_tokens(self, text):
+        try:
+            allowed = ['CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS','PDT', 'POS', 'PRP', 'PRP$','RB', 'RBR', 'RBS', 'RP', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT', 'WP', 'WP$', 'WRB']
+            words = nltk.word_tokenize(text)
+            words = nltk.pos_tag(words)
+            return ' '.join([word[1] for word in words if word[1] in allowed])
+
+        except Exception as e:
+            print(str(e))
+
+    def get(self, request, *args, **kwargs):
+        nltk.data.path.append('/var/lib/python/nltk')
+        self.learn_1()
+
+        return HttpResponse()
 
 class SentenceView(ListView):
     model = Sentence
     template_name = 'api/sentence_list.html'  # Default: <app_label>/<model_name>_list.html
     context_object_name = 'sentences'  # Default: object_list
     paginate_by = 100
-    queryset = Sentence.objects.all()  # Default: Model.objects.all()
+    # queryset = Sentence.objects.all()[:432]  # Default: Model.objects.all()
+    def get_queryset(self):
+        params = {
+            'page': self.request.GET.get('page'),
+            'ipp': self.paginate_by,
+            'filters': [],
+        }
+        qs = self.model.get_items(self.request.GET.get('query'), params);
+        return qs
+
 
 class Echo(object):
     """An object that implements just the write method of the file-like
@@ -58,7 +205,7 @@ def get_xml(sentences):
 def sentences_xml(request):
     # result = Sentence().get_approximate_flags('going to school is')
     #
-    return HttpResponse({'2'})
+    # return HttpResponse({'2'})
 
 
     connection = connections['sphinx']

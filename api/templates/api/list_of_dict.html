@@ -1,0 +1,27 @@
+{% extends 'api/base.html' %}
+
+{% block content %}
+    {% if items %}
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+                {% for key in items.0.keys %}
+                    <th>{{ key }}</th>
+                {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                {% for key, value in item.items %}
+                    <td>{{ value }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+    {% else %}
+        <div>Empty items</div>
+    {% endif %}
+
+{% endblock %}

@@ -36,6 +36,12 @@ class Sentence(models.Model):
         1: {1:True, 2:True, 3:False},
         2: {1:True, 3:True},
         3: {4:True},
+        4: {5:True},
+        5: {6:True},
+        6: {7:True},
+        7: {8:True},
+        8: {9:True},
+        9: {10:True},
     }
 
     expressions = {

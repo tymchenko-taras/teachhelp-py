@@ -19,10 +19,74 @@ import numpy as np
 from sklearn.naive_bayes import GaussianNB
 from sklearn.feature_extraction.text import CountVectorizer
 
+import mysql.connector
+import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import GaussianNB
+from sklearn import metrics
+import nltk
+
 
 
 class TestView(ListView):
 
+    def run(self):
+        nltk.data.path.append('/var/lib/python/nltk')
+        vectorizer = CountVectorizer(ngram_range=(1, 3))
+
+        rows = self.get_rows()
+        x = vectorizer.fit_transform(row['tokens'] for row in rows).toarray()
+        y = [row['value'] for row in rows]
+
+        model = GaussianNB()
+        model.fit(x, y)
+
+        expected = y
+        predicted = model.predict(x)
+
+        for i, value in enumerate(predicted):
+            rows[i]['predicted'] = value
+
+        missed = rows
+        # missed = [row for row in rows if row['predicted'] == row['value']]
+        return missed
+        # print(predicted)
+        # summarize the fit of the model
+        print(metrics.classification_report(expected, predicted))
+        # print(metrics.confusion_matrix(expected, predicted))
+
+    def get_rows(self):
+        cnx = mysql.connector.connect(user='dev', password='dev', host='container-mysql', database='teachhelp')
+        sentences = cnx.cursor()
+        query = ("""
+          SELECT `s`.`id`, `s`.`content`, sgc.`value`
+          FROM `sentence` s INNER JOIN `sentence_grammar_construction` sgc ON (`s`.`id` = `sgc`.`sentence_id`)
+          WHERE `sgc`.`grammar_construction_id` IN (1)
+          LIMIT 1000
+        """)
+        sentences.execute(query)
+        result = []
+        for (id, content, value) in sentences:
+            result.append({
+                'id': id,
+                'content': content,
+                'tokens': self.get_tokens(content),
+                'value': value
+            })
+        return result
+
+    def get_tokens(self, text):
+        try:
+            allowed = ['CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS',
+                       'PDT', 'POS', 'PRP', 'PRP$', 'RB', 'RBR', 'RBS', 'RP', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN',
+                       'VBP',
+                       'VBZ', 'WDT', 'WP', 'WP$', 'WRB']
+            words = nltk.word_tokenize(text)
+            words = nltk.pos_tag(words)
+            return ' '.join([word[1] for word in words if word[1] in allowed])
+
+        except Exception as e:
+            print(str(e))
 
     def learn_1(self):
         y, tokens = [], []
@@ -139,21 +203,22 @@ class TestView(ListView):
 
         return 1
 
-    def get_tokens(self, text):
-        try:
-            allowed = ['CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS','PDT', 'POS', 'PRP', 'PRP$','RB', 'RBR', 'RBS', 'RP', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT', 'WP', 'WP$', 'WRB']
-            words = nltk.word_tokenize(text)
-            words = nltk.pos_tag(words)
-            return ' '.join([word[1] for word in words if word[1] in allowed])
-
-        except Exception as e:
-            print(str(e))
+    # def get_tokens(self, text):
+    #     try:
+    #         allowed = ['CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS','PDT', 'POS', 'PRP', 'PRP$','RB', 'RBR', 'RBS', 'RP', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT', 'WP', 'WP$', 'WRB']
+    #         words = nltk.word_tokenize(text)
+    #         words = nltk.pos_tag(words)
+    #         return ' '.join([word[1] for word in words if word[1] in allowed])
+    #
+    #     except Exception as e:
+    #         print(str(e))
 
     def get(self, request, *args, **kwargs):
         nltk.data.path.append('/var/lib/python/nltk')
-        self.learn_1()
+        items = self.run()
 
-        return HttpResponse()
+        return render(request, 'api/list_of_dict.html', {'items': items})
+        # return HttpResponse()
 
 class SentenceView(ListView):
     model = Sentence
